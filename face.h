@@ -289,9 +289,9 @@ public:
 		if(change_color){
 			color = quality_color(ratio);
 		}
-
 		return ratio;
 	}
+	
 	//Modifiers
 	void setVertices(int num_verts, Vertex** verts){
 		assert(num_verts == 4);

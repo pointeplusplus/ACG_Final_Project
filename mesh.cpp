@@ -96,7 +96,7 @@ void Mesh::add_adjacency(Face* face){
 
 }
 
-void Mesh::addFace(int num_verts, Vertex** verts) {
+Face* Mesh::addFace(int num_verts, Vertex** verts) {
 	// create the triangle
 
 	Face* f;
@@ -118,10 +118,11 @@ void Mesh::addFace(int num_verts, Vertex** verts) {
 	assert (faces.find(f->getID()) == faces.end());
 	faces[f->getID()] = f;
 	add_adjacency(f);
+	return f;
 	
 }
 
-void Mesh::addFace(Vertex* p1, Vertex* p2, Vertex* p3){
+Face* Mesh::addFace(Vertex* p1, Vertex* p2, Vertex* p3){
 	Face* f = new TriangleFace();
 	Vertex* verts[3]= {p1, p2, p3};
 	f->setVertices(3, verts);
@@ -129,14 +130,16 @@ void Mesh::addFace(Vertex* p1, Vertex* p2, Vertex* p3){
 	assert (faces.find(f->getID()) == faces.end());
 	faces[f->getID()] = f;
 	add_adjacency(f);
+	return f;
 }
-void Mesh::addFace(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4){
+Face* Mesh::addFace(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4){
 	Face* f = new QuadFace();
 	Vertex* verts[4]= {p1, p2, p3,p4};
 	f->setVertices(4, verts);
 	assert (faces.find(f->getID()) == faces.end());
 	faces[f->getID()] = f;
 	add_adjacency(f);
+	return f;
 }
 
 void Mesh::removeFace(Face *f) {
@@ -731,14 +734,10 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 	if(new_quality > old_quality){
 		removeFace(face1);
 		removeFace(face2);
-		addFace(3, a_verts);
-		addFace(3, b_verts);
-
-
-
-
-
-
+		Face* f1 = addFace(3, a_verts);
+		Face* f2 = addFace(3, b_verts);
+		f1->setColor(glm::vec3(1,0,1));
+		f2->setColor(glm::vec3(1,0,1));
 
 		return true;
 	}

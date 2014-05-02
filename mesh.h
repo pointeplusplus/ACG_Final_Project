@@ -38,9 +38,9 @@ public:
 	// =====
 	// FACES
 	int numFaces() const { return faces.size(); }
-	void addFace(int num_verts, Vertex** verts);
-	void addFace(Vertex* p1, Vertex* p2, Vertex* p3);
-	void addFace(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4);
+	Face* addFace(int num_verts, Vertex** verts);
+	Face* addFace(Vertex* p1, Vertex* p2, Vertex* p3);
+	Face* addFace(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4);
 	void removeFace(Face* f);
 	void add_adjacency(Face* face);
 
@@ -73,6 +73,7 @@ public:
 	void showFaceTypes();
 	void refine_mesh_delaunay();
 	bool delaunay(Face* face1, Face* face2); //returns whether or not the diagonal was swapped
+	bool makes_obtuse_quad(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4);
 
 private:
 
