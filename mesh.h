@@ -73,7 +73,7 @@ public:
 	void showFaceTypes();
 	void refine_mesh_delaunay();
 	bool delaunay(Face* face1, Face* face2); //returns whether or not the diagonal was swapped
-	bool makes_obtuse_quad(Vertex* p1, Vertex* p2, Vertex* p3, Vertex* p4);
+	bool makes_convex_quad(Face* face1, Face* face2);
 
 private:
 

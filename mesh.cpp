@@ -7,6 +7,8 @@
 #include "vertex.h"
 #include "face.h"
 
+
+#define ANGLE_EPSILON 0.1 //From Barb's code
 #define ANGLE_THRESHOLD 0.35 //about 20 degrees
 //#define ANGLE_THRESHOLD 0.7 //about 40 degrees
 //#define ANGLE_THRESHOLD 500 // no threshold
@@ -16,6 +18,9 @@ int Face::next_face_id = 0;
 
 glm::vec3 black(0.0,0.0,0.0);
 glm::vec3 white(1.0,1.0,1.0);
+
+//helper (in face.h)
+double angle_between(Vertex* p_left, Vertex* p_middle, Vertex* p_right);
 
 // =======================================================================
 // MESH DESTRUCTOR 
@@ -221,14 +226,14 @@ void Mesh::Load(const std::string &input_file) {
 //			std::cout << "I found a face =]" << std::endl;
 			//if it's a quad
 			if (ss >> d) {
-//				std::cout << "    It's a quad face" <<std::endl;
+//				std::cout << "		It's a quad face" <<std::endl;
 				int d_ = d-vert_index;
 				assert (d_ >= 0 && d_ < numVertices());
 				addFace(getVertex(a_),getVertex(b_),getVertex(c_),getVertex(d_));
 			}
 			//if it's a triangle
 			else{
-//				std::cout << "    It's a triangle face" << std::endl;
+//				std::cout << "		It's a triangle face" << std::endl;
 				addFace(getVertex(a_),getVertex(b_),getVertex(c_));
 			} 
 			//if it has more than 4 sides (turn the rest into a triangle fan)
@@ -576,18 +581,18 @@ void Mesh::refine_mesh_delaunay(){
 	bool still_improving = true;
 	
 	while(still_improving){
-//		std::cout << "   Delaunay iteration" << std::endl;
+//		std::cout << "	 Delaunay iteration" << std::endl;
 		still_improving = false;
 		for(faceshashtype::iterator f = faces.begin(); f != faces.end(); f++){
-//			std::cout << "    next face" << std::endl;
+//			std::cout << "		next face" << std::endl;
 			Face* current_face = f->second;
 			//delaunay is for triangles
 			if(current_face->is_triangle_face()){
 				std::vector<Face*> adjacent_faces = current_face->get_adjacent_faces();
 
-				//see if we should delaunize with each face.  Break if we did (because this face changed)
+				//see if we should delaunize with each face.	Break if we did (because this face changed)
 				for(unsigned int a = 0; a < adjacent_faces.size(); a++){
-//					std::cout << "      this is an adjacent face" <<std::endl;
+//					std::cout << "			this is an adjacent face" <<std::endl;
 					if(adjacent_faces[a]->is_triangle_face()){ //mush both be triangles
 						bool swapped_diagonal = delaunay(current_face, adjacent_faces[a]);
 						if(swapped_diagonal){
@@ -608,24 +613,32 @@ void Mesh::refine_mesh_delaunay(){
 }
 
 bool Mesh::delaunay(Face* face1, Face* face2){
+
+	bool diagonal_swap_allowed = true;
 	assert(face1->is_triangle_face() && face2->is_triangle_face());
-//	std::cout << "        face are " << face1->getID() << " and " << face2->getID() << std::endl;
-//	std::cout << "        vertices are: face1: (" << (*face1)[0]->getIndex() << " " << (*face1)[1]->getIndex() << " " << (*face1)[2]->getIndex() << ") face2: ("
+//	std::cout << "				face are " << face1->getID() << " and " << face2->getID() << std::endl;
+//	std::cout << "				vertices are: face1: (" << (*face1)[0]->getIndex() << " " << (*face1)[1]->getIndex() << " " << (*face1)[2]->getIndex() << ") face2: ("
 //							 << (*face2)[0]->getIndex() << " " << (*face2)[1]->getIndex() << " " << (*face2)[2]->getIndex() << " )" << std::endl; 
 
+
+
+	//This is the part for diagonal swapping
 	glm::vec3 face1_normal = ComputeNormal((*face1)[0]->getPos(), (*face1)[1]->getPos(), (*face1)[2]->getPos());
 	glm::vec3 face2_normal = ComputeNormal((*face2)[0]->getPos(), (*face2)[1]->getPos(), (*face2)[2]->getPos());
 
-//	std::cout << "        normals are face1: (" << face1_normal.x << " " << face1_normal.y << " " << face1_normal.x << ") face2: ("
+//	std::cout << "				normals are face1: (" << face1_normal.x << " " << face1_normal.y << " " << face1_normal.x << ") face2: ("
 //							 << face2_normal.x << " " << face2_normal.y << " " << face2_normal.z << " )" << std::endl; 
 
 
 
 	double original_angle = acos( glm::dot(face1_normal, face2_normal) );
 
-//	std::cout << "        angle between these two faces is " << original_angle << std::endl;
+//	std::cout << "				angle between these two faces is " << original_angle << std::endl;
 	//triangles are are at too great of an angle to combine
-	if(original_angle > ANGLE_THRESHOLD) return false;
+
+	if(original_angle > ANGLE_THRESHOLD){
+		diagonal_swap_allowed = false;
+	} 
 
 	//find the vertices that the faces have in common (and not in common)
 	std::vector<bool> vert_in_face2;
@@ -652,7 +665,7 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 			just_in_face2 = (*face2)[v];
 		}
 	}
-	
+
 	//if the vertices are the first and the third, they were put into the vector in the wrong order
 	if(vert_in_face2[1] == false){
 		Vertex* tmp = vertices[0];
@@ -684,10 +697,10 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 	double angle_between_a_1 = acos(glm::dot(faceb_normal, face1_normal));
 
 	//make sure the new triangles' normals are not too different from each other
-	if(new_angle > ANGLE_THRESHOLD) return false;
+	if(new_angle > ANGLE_THRESHOLD){
+		diagonal_swap_allowed = false;
+	} 
 
-
-	
 	//this is a hack to make sure triangles are facing the right way (I'm sorry)
 	if(angle_between_b_1 > ANGLE_THRESHOLD || angle_between_a_1 > ANGLE_THRESHOLD){
 		Vertex* tmp = a_verts[0];
@@ -711,32 +724,114 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 
 
 		//I don't think this should ever happen because it didn't facing the other direction (outside of the if statement)
-		if(new_angle > ANGLE_THRESHOLD) return false;
+		if(new_angle > ANGLE_THRESHOLD){
+			diagonal_swap_allowed = false;
+		} 
 
 		//not sure if this should happen
 		if(angle_between_b_1 > ANGLE_THRESHOLD || angle_between_a_1 > ANGLE_THRESHOLD){
-			return false;
+			diagonal_swap_allowed = false;
 		}
 
 
 	}
 
-//	std::cout << "        IF WE IMPROVE, WE'RE SWAPPING!!!" << std::endl;
-
-
 	//both angles are close enough, so if the diagonal swap improves quality, we want to do it
 	double old_quality = face1->quality(false) + face2->quality(false);
-	double new_quality = new_face_a->quality(false) + new_face_b->quality(false);
+	double diagonal_swap_new_quality = new_face_a->quality(false) + new_face_b->quality(false);
 
-//	std::cout << "        Old quality is " << old_quality << " and new quality is " << new_quality << std::endl;
+//	std::cout << "				Old quality is " << old_quality << " and new quality is " << new_quality << std::endl;
 
-	//should we swap
-	if(new_quality > old_quality){
+	//SEE IF QUAD SWAPPING IS ALLOWED=========================================================
+	bool allowed_to_make_quad = true;
+
+	if(!makes_convex_quad(face1, face2) ){
+		allowed_to_make_quad = false;
+	}
+	Face* new_face_c = new QuadFace();
+	Vertex** c_verts = new Vertex*[4];
+	c_verts[0] = just_in_face1;
+	c_verts[1] = vertices_in_common[0];
+	c_verts[2] = just_in_face2;
+	c_verts[3] = vertices_in_common[1];
+	new_face_c->setVertices(4, c_verts);
+
+
+	
+	//this is actually the normal of one of the 2 triangles if this shape isn't planer
+	glm::vec3 facec_normal = ComputeNormal(c_verts[0]->getPos(), c_verts[1]->getPos(), c_verts[2]->getPos());
+	double angle_between_c_1 = acos( glm::dot(facec_normal, face1_normal) );
+	double angle_between_c_2 = acos( glm::dot(facec_normal, face2_normal) );
+
+	if(diagonal_swap_allowed){
+//		std::cout << "angle between c and 1: " << angle_between_c_1 << " and angle between c and 2: " << angle_between_c_2 << std::endl;
+		//std::cout << "face c normal: " << facec_normal << "   face 1 normal: " << face1_normal << "   face 2 normal: " << face2_normal << std::endl;
+	}
+	//same hack as the triangles (this only happens if other quad is unacceptable)
+	if(angle_between_c_1 > ANGLE_THRESHOLD || angle_between_c_2 > ANGLE_THRESHOLD){
+
+
+		//starting from the other side
+		allowed_to_make_quad = true;
+		
+		//swap the order of the verts
+		Vertex* tmp = c_verts[0];
+		c_verts[0] = c_verts[3];
+		c_verts[3] = tmp;
+		tmp = c_verts[1];
+		c_verts[1] = c_verts[2];
+		c_verts[2] = tmp;
+		new_face_c->setVertices(4, c_verts);
+
+		if(!makes_convex_quad(face1, face2) ){
+			allowed_to_make_quad = false;
+		}
+
+		facec_normal = ComputeNormal(c_verts[0]->getPos(), c_verts[1]->getPos(), c_verts[2]->getPos());
+		angle_between_c_1 = acos( glm::dot(facec_normal, face1_normal) );
+		angle_between_c_2 = acos( glm::dot(facec_normal, face2_normal) );
+
+		//I turned it around and it's /still/ not good
+		if(angle_between_c_1 > ANGLE_THRESHOLD || angle_between_c_2 > ANGLE_THRESHOLD){
+			allowed_to_make_quad = false;
+		}
+
+	}
+	double create_quad_new_quality = new_face_c->quality(false);
+
+	//==========================================================================================
+
+	assert(old_quality >= 0); //old quality should be non-negative
+	
+	//if an operation isn't allowed, make the quality generated by that = -1, so we don't have to worry about checking this later
+	if(!diagonal_swap_allowed){
+		diagonal_swap_new_quality = -1;
+	}
+	if(!allowed_to_make_quad){
+		create_quad_new_quality = -1;
+	}
+	else{
+//		std::cout << std::endl << std::endl << "creating a quad was allowed" <<std::endl << std::endl;
+	}
+	
+	//shoucd we make a quad
+	if(create_quad_new_quality > old_quality && create_quad_new_quality > diagonal_swap_new_quality){
+		std::cout << std::endl << std::endl << "making a quad!!" <<std::endl << std::endl;
+		removeFace(face1);
+		removeFace(face2);
+		Face* f1 = addFace(4, c_verts);
+		f1->setColor(glm::vec3(0.3, 0, 0.8)); //blueish
+
+		return true;
+	}
+
+	//should we swap diagonals
+	if(diagonal_swap_new_quality > old_quality && diagonal_swap_new_quality > create_quad_new_quality){
 		removeFace(face1);
 		removeFace(face2);
 		Face* f1 = addFace(3, a_verts);
 		Face* f2 = addFace(3, b_verts);
-		f1->setColor(glm::vec3(1,0,1));
+		f1->setColor(glm::vec3(1,0,1)); //purple
 		f2->setColor(glm::vec3(1,0,1));
 
 		return true;
@@ -747,6 +842,57 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 	return false;
 
 }
+
+//Note: this should only be called with triangle faces
+bool Mesh::makes_convex_quad(Face* face1, Face* face2){
+
+	 
+	//find the vertices that the faces have in common (and not in common)
+	//std::vector<bool> vert_in_face2;
+	std::vector<Vertex*> vertices_in_common;
+	Vertex* just_in_face1;
+	Vertex* just_in_face2;
+
+	//get verts in common and the one just in face 1
+	for(int v = 0; v < 3; v++){
+		if(face2->has_vertex( (*face1)[v] ) ){
+			vertices_in_common.push_back((*face1)[v]);
+//			vert_in_face2.push_back(true);
+		}
+		else{
+			just_in_face1 = ( (*face1)[v] );
+//			vert_in_face2.push_back(false);
+		}
+	}
+	assert(vertices_in_common.size() == 2);
+
+	//get the vert that is just in face 2
+	for(int v = 0; v < 3; v++){
+		if(! (face1->has_vertex( (*face2)[v] )) ){
+			just_in_face2 = (*face2)[v];
+		}
+	}
+
+	//check to make sure no angles made by the verts in common are over 90
+	//Note: some convex polygons will still fail, but th
+	//fist vertex shared
+	double angle_sum = angle_between(just_in_face1, vertices_in_common[0], vertices_in_common[1]);
+	angle_sum += angle_between(just_in_face2, vertices_in_common[0], vertices_in_common[1]);
+	if(angle_sum > M_PI){
+		return false;
+	}
+
+	angle_sum = angle_between(just_in_face1, vertices_in_common[1], vertices_in_common[0]);
+	angle_sum += angle_between(just_in_face2, vertices_in_common[1], vertices_in_common[0]);
+	if(angle_sum > M_PI){
+		return false;
+	}
+
+	//second vertex shared
+
+	return true;
+}
+
 
 void Mesh::cleanupVBOs() {
 	glDeleteBuffers(1, &mesh_VAO);

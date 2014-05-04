@@ -12,6 +12,16 @@
 // Stores the indices to the 3 vertices of the triangles, 
 // used by the mesh class
 
+//helper
+double angle_between(Vertex* p_left, Vertex* p_middle, Vertex* p_right){
+	glm::vec3 vec_1 = p_left->getPos() - p_middle->getPos();
+	vec_1 = glm::normalize(vec_1);
+	glm::vec3 vec_2 = p_right->getPos() - p_middle->getPos();
+	vec_2 = glm::normalize(vec_2);
+	return acos( glm::dot(vec_1, vec_2) );
+}
+
+
 class Face {
 
 public:
@@ -202,11 +212,23 @@ public:
 	double quality(bool change_color){
 
 		//ratio of area to area of circomscribed circle
-		double ratio = area() / area_of_circumscribed_circle();
+		double area_ratio = area() / area_of_circumscribed_circle();
 
 		//compare to ideal to make return ratio 0 - 1
-		ratio /= TRIANGLE_TO_CIRCLE_RATIO;
-//		std::cout << "  quality of triangle face is " << ratio <<std::endl;
+		area_ratio /= TRIANGLE_TO_CIRCLE_RATIO;
+
+		//get the smallest angle
+		double smallest_angle = angle_between(vertices[0], vertices[1], vertices[2]);		
+		double current_angle = angle_between(vertices[1], vertices[2], vertices[0]);
+		if(current_angle < smallest_angle) smallest_angle = current_angle;
+		current_angle = angle_between(vertices[2], vertices[0], vertices[1]);
+		if(current_angle < smallest_angle) smallest_angle = current_angle;
+
+		
+		//pi/3 = 60, which is the 'ideal' for a quad
+		double angle_ratio = smallest_angle/(M_PI/3.0);
+
+		double ratio = (area_ratio + angle_ratio)/2.0;
 
 		//TODO, move color change
 		if(change_color){
@@ -276,19 +298,40 @@ public:
 		if(temp_area > area) area = temp_area;
 		return area;
 	}
+
+
+
+
 	double quality(bool change_color){
 		//ratio of area to area of circomscribed circle
-		double ratio = area() / area_of_circumscribed_circle();
+		double area_ratio = area() / area_of_circumscribed_circle();
 //		std::cout << "perfect ratio is " << ratio << std::endl;
 
 		//compare to ideal to make return ratio 0 - 1
-		ratio /= QUAD_TO_CIRCLE_RATIO;
+		area_ratio /= QUAD_TO_CIRCLE_RATIO;
 //		std::cout << "    quality of quad face is " << ratio << std::endl;
+
+		
+
+		//get the smallest angle
+		double smallest_angle = angle_between(vertices[0], vertices[1], vertices[2]);		
+		double current_angle = angle_between(vertices[1], vertices[2], vertices[3]);
+		if(current_angle < smallest_angle) smallest_angle = current_angle;
+		current_angle = angle_between(vertices[2], vertices[3], vertices[0]);
+		if(current_angle < smallest_angle) smallest_angle = current_angle;
+		current_angle = angle_between(vertices[3], vertices[0], vertices[1]);
+		if(current_angle < smallest_angle) smallest_angle = current_angle;
+		
+		//pi/2 = 90, which is the 'ideal' for a quad
+		double angle_ratio = smallest_angle/(M_PI/2.0);
+
+		double ratio = (area_ratio + angle_ratio)/2.0;
 
 		//TODO, move color change
 		if(change_color){
 			color = quality_color(ratio);
 		}
+
 		return ratio;
 	}
 	
