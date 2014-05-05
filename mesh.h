@@ -73,7 +73,9 @@ public:
 	void showFaceTypes();
 	void refine_mesh_delaunay();
 	bool delaunay(Face* face1, Face* face2); //returns whether or not the diagonal was swapped
+	bool triangle_quad_mushing(Face* face1, Face* face2); //face1 = triangle, face2 = quad returns if they were changed
 	bool makes_convex_quad(Face* face1, Face* face2);
+	bool combine_two_triangles(Face* tri1, Face* tri2, Face* &quad); //quad is the combination of triangles 1&2 (return is if the quad is valid)
 
 private:
 

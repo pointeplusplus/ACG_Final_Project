@@ -22,6 +22,21 @@ glm::vec3 white(1.0,1.0,1.0);
 //helper (in face.h)
 double angle_between(Vertex* p_left, Vertex* p_middle, Vertex* p_right);
 
+//assumes that both faces are triangles
+int verts_in_common(Face* face1, Face* face2){
+	int in_common = 0;
+
+	for(int face1_v = 0; face1_v < 3; face1_v++){
+		for(int face2_v = 0; face2_v < 3; face2_v++){
+			if( (*face1)[face1_v] == (*face2)[face2_v] ){
+				in_common++;
+			}
+		}
+	}
+
+	return in_common;
+}
+
 // =======================================================================
 // MESH DESTRUCTOR 
 // =======================================================================
@@ -576,8 +591,8 @@ void Mesh::showFaceTypes(){
 }
 
 void Mesh::refine_mesh_delaunay(){
-	int num_swaps = 0;
-	std::cout << "Delaunay Mesh Refinement!" << std::endl;
+	int num_modifications = 0;
+	std::cout << "Mesh Refinement!" << std::endl;
 	bool still_improving = true;
 	
 	while(still_improving){
@@ -597,7 +612,15 @@ void Mesh::refine_mesh_delaunay(){
 						bool swapped_diagonal = delaunay(current_face, adjacent_faces[a]);
 						if(swapped_diagonal){
 							still_improving = true;
-							num_swaps++;
+							num_modifications++;
+							break;
+						}
+					}
+					else if(adjacent_faces[a]->is_quad_face()){
+						bool shapes_changed = triangle_quad_mushing(current_face, adjacent_faces[a]); 
+						if(shapes_changed){
+							still_improving = true;
+							num_modifications++;
 							break;
 						}
 					}
@@ -609,7 +632,7 @@ void Mesh::refine_mesh_delaunay(){
 		}
 	}
 
-	std::cout << "There were " << num_swaps << " swaps made in this mesh refinement!!" << std::endl;
+	std::cout << "There were " << num_modifications << " modefications made in this mesh refinement!!" << std::endl;
 }
 
 bool Mesh::delaunay(Face* face1, Face* face2){
@@ -763,10 +786,7 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 	double angle_between_c_1 = acos( glm::dot(facec_normal, face1_normal) );
 	double angle_between_c_2 = acos( glm::dot(facec_normal, face2_normal) );
 
-	if(diagonal_swap_allowed){
-//		std::cout << "angle between c and 1: " << angle_between_c_1 << " and angle between c and 2: " << angle_between_c_2 << std::endl;
-		//std::cout << "face c normal: " << facec_normal << "   face 1 normal: " << face1_normal << "   face 2 normal: " << face2_normal << std::endl;
-	}
+
 	//same hack as the triangles (this only happens if other quad is unacceptable)
 	if(angle_between_c_1 > ANGLE_THRESHOLD || angle_between_c_2 > ANGLE_THRESHOLD){
 
@@ -816,11 +836,11 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 	
 	//shoucd we make a quad
 	if(create_quad_new_quality > old_quality && create_quad_new_quality > diagonal_swap_new_quality){
-		std::cout << std::endl << std::endl << "making a quad!!" <<std::endl << std::endl;
+//		std::cout << std::endl << std::endl << "making a quad!!" <<std::endl << std::endl;
 		removeFace(face1);
 		removeFace(face2);
 		Face* f1 = addFace(4, c_verts);
-		f1->setColor(glm::vec3(0.3, 0, 0.8)); //blueish
+		f1->setColor(glm::vec3(0.3, 0, 0.8)); //dark purple
 
 		return true;
 	}
@@ -831,7 +851,7 @@ bool Mesh::delaunay(Face* face1, Face* face2){
 		removeFace(face2);
 		Face* f1 = addFace(3, a_verts);
 		Face* f2 = addFace(3, b_verts);
-		f1->setColor(glm::vec3(1,0,1)); //purple
+		f1->setColor(glm::vec3(1,0,1)); //bright purple
 		f2->setColor(glm::vec3(1,0,1));
 
 		return true;
@@ -891,6 +911,242 @@ bool Mesh::makes_convex_quad(Face* face1, Face* face2){
 	//second vertex shared
 
 	return true;
+}
+
+bool Mesh::triangle_quad_mushing(Face* face1, Face* face2){
+	assert(face1->is_triangle_face() && face2->is_quad_face() );
+
+	glm::vec3 face1_normal = ComputeNormal((*face1)[0]->getPos(), (*face1)[1]->getPos(), (*face1)[2]->getPos());	
+
+	double old_quality = (face1->quality(false) + face2->quality(false))/2.0;
+
+	//check which way to cut the square is best (for all triangle solution)
+	//solution  a/b
+	Face* face_a = new TriangleFace();
+	Vertex** a_verts = new Vertex*[3];
+	a_verts[0] = (*face2)[0];
+	a_verts[1] = (*face2)[1];
+	a_verts[2] = (*face2)[2]; 
+	face_a -> setVertices(3, a_verts);
+	Face* face_b = new TriangleFace();
+	Vertex** b_verts = new Vertex*[3];
+	b_verts[0] = (*face2)[0];
+	b_verts[1] = (*face2)[2];
+	b_verts[2] = (*face2)[3]; 
+	face_b -> setVertices(3, b_verts);
+
+	glm::vec3 facea_normal = ComputeNormal(a_verts[0]->getPos(), a_verts[1]->getPos(), a_verts[2]->getPos());
+	glm::vec3 faceb_normal = ComputeNormal(b_verts[0]->getPos(), b_verts[1]->getPos(), b_verts[2]->getPos());
+	double a_b_quality = (face1->quality(false) + face_a->quality(false) + face_b->quality(false))/3.0; //turn it all to triangles
+
+	//solution  c/d
+	Face* face_c = new TriangleFace();
+	Vertex** c_verts = new Vertex*[3];
+	c_verts[0] = (*face2)[0];
+	c_verts[1] = (*face2)[1];
+	c_verts[2] = (*face2)[3]; 
+	face_c -> setVertices(3, c_verts);
+	Face* face_d = new TriangleFace();
+	Vertex** d_verts = new Vertex*[3];
+	d_verts[0] = (*face2)[1];
+	d_verts[1] = (*face2)[2];
+	d_verts[2] = (*face2)[3]; 
+	face_d -> setVertices(3, d_verts);
+
+	glm::vec3 facec_normal = ComputeNormal(c_verts[0]->getPos(), c_verts[1]->getPos(), c_verts[2]->getPos());
+	glm::vec3 faced_normal = ComputeNormal(d_verts[0]->getPos(), d_verts[1]->getPos(), d_verts[2]->getPos());
+	double c_d_quality = (face1->quality(false) + face_c->quality(false) + face_d->quality(false))/3.0;
+
+	//try combining the triangle with face a or face b
+	double a_b_1_quality = -1;
+	Face* quad1;
+	bool quad1_valid = false;
+	bool used_face_a = false;
+
+	if(verts_in_common(face1, face_a) == 2){ //face a is adjacent to face 1
+		used_face_a = true;
+		quad1_valid = combine_two_triangles(face1, face_a, quad1);
+		if(acos( glm::dot(face1_normal, facea_normal) ) > ANGLE_THRESHOLD){
+			quad1_valid = false;
+		}
+		if(quad1_valid){ //face a was turned into the quad
+			a_b_1_quality = (quad1->quality(false) + face_b->quality(false))/2.0;
+		}
+	}
+	else{ //face b is adjacent to face1
+		quad1_valid = combine_two_triangles(face1, face_b, quad1);
+		if(acos( glm::dot(face1_normal, faceb_normal) ) > ANGLE_THRESHOLD){
+			quad1_valid = false;
+		}
+		if(quad1_valid){ //face b was turned into the quad
+			a_b_1_quality = (quad1->quality(false) + face_a->quality(false))/2.0;
+		}
+	}
+	if(quad1_valid == false) a_b_1_quality = -1;
+
+	//try combining the triangle with face c or face d
+	double c_d_1_quality = -1;
+	Face* quad2;
+	bool quad2_valid = false;
+	bool used_face_c = false;
+
+	if(verts_in_common(face1, face_c) == 2){ //face d is adjacent to face 1
+		used_face_c = true;
+		quad2_valid = combine_two_triangles(face1, face_c, quad2);
+		if(acos( glm::dot(face1_normal, facec_normal) ) > ANGLE_THRESHOLD){
+			quad2_valid = false;
+		}
+		if(quad2_valid){ //face c was turned into the quad
+			c_d_1_quality = (quad2->quality(false) + face_d->quality(false))/2.0;
+		}
+	}
+	else{ //face d is adjacent to face1
+		quad2_valid = combine_two_triangles(face1, face_d, quad2);
+		if(acos( glm::dot(face1_normal, faced_normal) ) > ANGLE_THRESHOLD){
+			quad2_valid = false;
+		}
+		if(quad2_valid){ //face d was turned into the quad1
+			c_d_1_quality = (quad2->quality(false) + face_c->quality(false))/2.0;
+		}
+	}
+	if(quad2_valid == false) c_d_1_quality = -1;
+
+
+	//now check to see what we should do
+	//best thing is the a/b triangle split of the quad
+	if(a_b_quality > old_quality && a_b_quality > c_d_quality && a_b_quality> a_b_1_quality && a_b_quality > c_d_1_quality){
+		removeFace(face2);
+		Face* a_face = addFace(3, a_verts);
+		Face* b_face = addFace(3, b_verts);
+		a_face->setColor(glm::vec3(1,1,0));
+		b_face->setColor(glm::vec3(1,1,0));
+		return true;
+	}
+	//best thing is the c/d triangle split (don't need to test against things that are above)
+	else if(c_d_quality > old_quality && c_d_quality > a_b_1_quality && c_d_quality > c_d_1_quality){
+		removeFace(face2);
+		Face* c_face = addFace(3, c_verts);
+		Face* d_face = addFace(3, d_verts);
+		c_face->setColor(glm::vec3(1,1,0));
+		d_face->setColor(glm::vec3(1,1,0));
+		return true;	
+	}
+	else if(a_b_1_quality > old_quality &&  a_b_1_quality > c_d_1_quality){
+		removeFace(face1);
+		removeFace(face2);
+		Face* q1 = addFace((*quad1)[0],(*quad1)[1],(*quad1)[2],(*quad1)[3]);
+		q1->setColor(glm::vec3(1,1,0));
+		if(used_face_a){
+			Face* b_face = addFace(3, b_verts);
+			b_face ->setColor(glm::vec3(1,1,0));
+		}
+		else{
+			Face* a_face = addFace(3, a_verts);
+			a_face ->setColor(glm::vec3(1,1,0));
+		}
+		return true;
+	}
+	else if(c_d_1_quality > old_quality){
+		removeFace(face1);
+		removeFace(face2);
+		Face* q2 = addFace((*quad2)[0],(*quad2)[1],(*quad2)[2],(*quad2)[3]);
+		q2->setColor(glm::vec3(1,1,0));
+		if(used_face_c){
+			Face* d_face = addFace(3, d_verts);
+			d_face ->setColor(glm::vec3(1,1,0));
+		}
+		else{
+			Face* c_face = addFace(3, c_verts);
+			c_face ->setColor(glm::vec3(1,1,0));
+		}
+		return true;
+	}
+
+	return false;
+}
+
+bool Mesh::combine_two_triangles(Face* face1, Face* face2, Face* &quad){
+
+	glm::vec3 face1_normal = ComputeNormal((*face1)[0]->getPos(), (*face1)[1]->getPos(), (*face1)[2]->getPos());
+	glm::vec3 face2_normal = ComputeNormal((*face2)[0]->getPos(), (*face2)[1]->getPos(), (*face2)[2]->getPos());
+
+	std::vector<Vertex*> vertices_in_common;
+	Vertex* just_in_face1;
+	Vertex* just_in_face2;
+
+	//get verts in common and the one just in face 1
+	for(int v = 0; v < 3; v++){
+		if(face2->has_vertex( (*face1)[v] ) ){
+			vertices_in_common.push_back((*face1)[v]);
+
+		}
+		else{
+			just_in_face1 = ( (*face1)[v] );
+		}
+	}
+	assert(vertices_in_common.size() == 2);
+
+	//get the vert that is just in face 2
+	for(int v = 0; v < 3; v++){
+		if(! (face1->has_vertex( (*face2)[v] )) ){
+			just_in_face2 = (*face2)[v];
+		}
+	}
+
+	//SEE IF QUAD SWAPPING IS ALLOWED=========================================================
+	bool allowed_to_make_quad = true;
+
+	if(!makes_convex_quad(face1, face2) ){
+		allowed_to_make_quad = false;
+	}
+	Face* new_face_c = new QuadFace();
+	Vertex** c_verts = new Vertex*[4];
+	c_verts[0] = just_in_face1;
+	c_verts[1] = vertices_in_common[0];
+	c_verts[2] = just_in_face2;
+	c_verts[3] = vertices_in_common[1];
+	new_face_c->setVertices(4, c_verts);
+
+
+	
+	//this is actually the normal of one of the 2 triangles if this shape isn't planer
+	glm::vec3 facec_normal = ComputeNormal(c_verts[0]->getPos(), c_verts[1]->getPos(), c_verts[2]->getPos());
+	double angle_between_c_1 = acos( glm::dot(facec_normal, face1_normal) );
+	double angle_between_c_2 = acos( glm::dot(facec_normal, face2_normal) );
+
+
+	//same hack as the triangles (this only happens if other quad is unacceptable)
+	if(angle_between_c_1 > ANGLE_THRESHOLD || angle_between_c_2 > ANGLE_THRESHOLD){
+
+
+		//starting from the other side
+		allowed_to_make_quad = true;
+		
+		//swap the order of the verts
+		Vertex* tmp = c_verts[0];
+		c_verts[0] = c_verts[3];
+		c_verts[3] = tmp;
+		tmp = c_verts[1];
+		c_verts[1] = c_verts[2];
+		c_verts[2] = tmp;
+		new_face_c->setVertices(4, c_verts);
+
+		if(!makes_convex_quad(face1, face2) ){
+			allowed_to_make_quad = false;
+		}
+
+		facec_normal = ComputeNormal(c_verts[0]->getPos(), c_verts[1]->getPos(), c_verts[2]->getPos());
+		angle_between_c_1 = acos( glm::dot(facec_normal, face1_normal) );
+		angle_between_c_2 = acos( glm::dot(facec_normal, face2_normal) );
+
+		//I turned it around and it's /still/ not good
+		if(angle_between_c_1 > ANGLE_THRESHOLD || angle_between_c_2 > ANGLE_THRESHOLD){
+			allowed_to_make_quad = false;
+		}
+
+	}
+	quad = new_face_c;
+	return allowed_to_make_quad;
 }
 
 
